@@ -5,7 +5,10 @@ from discord import app_commands
 from sniper import VintedSniper
 
 TOKEN = os.getenv("DISCORD_TOKEN")
-GUILD_ID = 123456789012345678  # DEINE SERVER ID
+GUILD_ID = 1459838801391259900  # deine Server-ID
+guild = discord.Object(id=GUILD_ID)
+await bot.tree.sync(guild=guild)
+
 
 class Bot(discord.Client):
     def __init__(self):
@@ -71,3 +74,4 @@ async def on_ready():
     print(f"✅ Bot online als {bot.user}")
 
 bot.run(TOKEN)
+
