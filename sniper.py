@@ -2,54 +2,70 @@ import tls_client
 import time
 
 class VintedSniper:
-    def __init__(self, target_url):
-        self.api_url = self.convert_url(target_url)
+    def __init__(self, url):
+        self.api_url = self.convert_url(url)
         self.session = tls_client.Session(client_identifier="chrome_112")
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                          "AppleWebKit/537.36 (KHTML, like Gecko) "
-                          "Chrome/112.0.0.0 Safari/537.36",
-            "Accept": "application/json, text/plain, */*",
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "application/json"
         }
-        self.seen_items = []
+        self.seen = set()
 
     def convert_url(self, url):
-        if "api/v2/catalog/items" in url: return url
-        base_api = "https://www.vinted.de/api/v2/catalog/items?"
-        params = url.split('?')[-1]
-        if params == url: return base_api + "per_page=20&order=newest_first"
-        if "order=" not in params: params += "&order=newest_first"
-        return base_api + params
-
-    def fetch_cookie(self):
-        try:
-            self.session.get("https://www.vinted.de", headers=self.headers)
-        except: pass
+        if "api/v2/catalog/items" in url:
+            return url
+        base = "https://www.vinted.de/api/v2/catalog/items?"
+        params = url.split("?")[-1]
+        if "order=" not in params:
+            params += "&order=newest_first"
+        return base + params
 
     def fetch_items(self):
-        self.fetch_cookie()
         try:
-            response = self.session.get(self.api_url, headers=self.headers)
-            if response.status_code == 200:
-                items = response.json().get("items", [])
-                new_items = [i for i in items if i["id"] not in self.seen_items]
-                self.seen_items += [i["id"] for i in new_items]
-                if len(self.seen_items) > 500:
-                    self.seen_items = self.seen_items[-200:]
-                return new_items
-            else:
+            r = self.session.get(self.api_url, headers=self.headers)
+            if r.status_code != 200:
                 return []
-        except Exception as e:
-            print(f"Fehler beim Laden: {e}")
+
+            items = r.json().get("items", [])
+            new = []
+
+            for i in items:
+                if i["id"] not in self.seen:
+                    self.seen.add(i["id"])
+                    new.append(i)
+
+            if len(self.seen) > 500:
+                self.seen = set(list(self.seen)[-200:])
+
+            return new
+        except:
             return []
 
-    def get_clean_status(self, item):
-        raw_status = item.get('status_id') or item.get('status') or "Unbekannt"
-        mapping = {
-            "6": "Neu mit Etikett ✨", "new_with_tags": "Neu mit Etikett ✨",
-            "1": "Neu ohne Etikett ✨", "new_without_tags": "Neu ohne Etikett ✨",
-            "2": "Sehr gut 👌", "very_good": "Sehr gut 👌",
-            "3": "Gut 👍", "good": "Gut 👍",
-            "4": "Zufriedenstellend 🆗", "satisfactory": "Zufriedenstellend 🆗"
-        }
-        return mapping.get(str(raw_status).lower(), str(raw_status))
+    # ===== Hilfsfunktionen =====
+
+    def format_price(self, item):
+        p = item.get("price") or item.get("total_item_price")
+        if isinstance(p, dict):
+            return float(p.get("amount", 0))
+        return float(p or 0)
+
+    def calc_total_price(self, base_price):
+        # grobe Vinted Gebühren
+        return round(base_price + 0.70 + base_price * 0.05 + 3.99, 2)
+
+    def get_image(self, item):
+        photos = item.get("photos", [])
+        if photos:
+            return photos[0]["url"].replace("/medium/", "/full/")
+        return None
+
+    def get_uploaded_time(self, item):
+        ts = item.get("created_at_ts")
+        if not ts:
+            return "Unbekannt"
+        diff = int(time.time() - ts)
+        if diff < 60:
+            return "gerade eben"
+        if diff < 3600:
+            return f"vor {diff//60} Min"
+        return f"vor {diff//3600} Std"
