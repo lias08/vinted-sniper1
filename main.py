@@ -2,11 +2,9 @@ import discord
 from discord.ext import commands
 import os
 
-# -------------------------
-# Environment Variables
-# -------------------------
-TOKEN = os.getenv("DISCORD_TOKEN")          # Dein Bot-Token
-GUILD_ID = int(os.getenv("1459838801391259900"))  # Die Server-ID, in dem der Bot testen soll
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))  # Name der ENV
+TOKEN = os.getenv("DISCORD_TOKEN")             # Name der ENV
+
 
 # -------------------------
 # Intents
@@ -46,4 +44,5 @@ async def ping_command(interaction: discord.Interaction):
 # Run Bot
 # -------------------------
 bot.run(TOKEN)
+
 
