@@ -1,4 +1,4 @@
-discord.py==2.6.4
-tls_client==1.6.2
+discord.py
+tls_client
 typing_extensions
-aiohttp==3.9.5
+aiohttp
