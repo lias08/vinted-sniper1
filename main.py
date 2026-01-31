@@ -2,8 +2,10 @@ import tls_client
 import time
 import json
 import os
-
 WEBHOOK_URL = os.getenv("WEBHOOK_URL")
+
+print("DEBUG WEBHOOK_URL =", repr(WEBHOOK_URL))
+
 BROWSER_URL = "https://www.vinted.de/catalog?search_text=sweater&catalog[]=1811&price_to=20.0&currency=EUR&size_ids[]=207&size_ids[]=208&size_ids[]=209&brand_ids[]=304&brand_ids[]=88&search_id=30738255657&order=newest_first"
 # ==========================================
 
@@ -126,3 +128,4 @@ if __name__ == "__main__":
     bot = VintedSniper(BROWSER_URL)
 
     bot.run()
+
