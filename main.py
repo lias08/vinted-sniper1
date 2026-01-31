@@ -1,74 +1,75 @@
-import os
-import asyncio
 import discord
-from discord.ext import commands
-from vinted_sniper import VintedSniper
+from discord import app_commands
+from discord.ext import commands, tasks
+import asyncio
+from sniper import VintedSniper
 
-TOKEN = os.getenv("DISCORD_TOKEN")
+import os
+
+TOKEN = os.getenv("DISCORD_TOKEN")  # Discord Bot Token
 
 intents = discord.Intents.default()
+intents.message_content = True  # nötig für Slash Commands
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-active_tasks = {}
-
+active_snipers = {}  # Channel-ID -> Task
 
 @bot.event
 async def on_ready():
-    print("🟢 on_ready wurde aufgerufen")
-    synced = await bot.tree.sync()
-    print(f"🟢 Slash Commands synced: {len(synced)}")
     print(f"✅ Bot online als {bot.user}")
+    try:
+        synced = await bot.tree.sync()
+        print(f"✅ Slash Commands synchronisiert: {len(synced)}")
+    except Exception as e:
+        print(f"Fehler beim Sync: {e}")
 
-
-def build_embed(item):
-    embed = discord.Embed(
-        title=item.get("title", "Neues Item"),
-        url=item.get("url") or f"https://www.vinted.de/items/{item['id']}",
-        color=0x09b1ba
-    )
-    embed.add_field(
-        name="Preis",
-        value=f"{item.get('price', {}).get('amount', '?')} €",
-        inline=True
-    )
-    return embed
-
-
-async def run_sniper(url, channel):
-    print(f"🟡 Sniper gestartet für Channel {channel.id}")
-    sniper = VintedSniper(url)
-
-    await channel.send("🔍 **Suche gestartet**")
-
-    while True:
-        items = sniper.fetch_items()
-        print(f"🟡 {len(items)} neue Items gefunden")
-
-        for item in items:
-            await channel.send(embed=build_embed(item))
-            await asyncio.sleep(0.5)
-
-        await asyncio.sleep(1)
-
-
-@bot.tree.command(name="start", description="Starte eine Vinted Suche in diesem Channel")
+@bot.tree.command(name="start", description="Starte Vinted Sniper in diesem Channel")
+@app_commands.describe(url="URL zum Vinted Katalog")
 async def start(interaction: discord.Interaction, url: str):
-    print("🟢 /start Command aufgerufen")
+    await interaction.response.send_message(
+        "✅ Suche gestartet, Ergebnisse erscheinen hier.", ephemeral=True
+    )
 
     channel = interaction.channel
 
-    await interaction.response.send_message(
-        "✅ Command empfangen, starte Suche…",
-        ephemeral=True
-    )
-
-    if channel.id in active_tasks:
-        print("⚠️ Suche läuft bereits")
+    if channel.id in active_snipers:
+        await channel.send("⚠️ Sniper läuft bereits in diesem Channel!")
         return
 
-    task = asyncio.create_task(run_sniper(url, channel))
-    active_tasks[channel.id] = task
-    print("🟢 Task gestartet")
+    sniper = VintedSniper(url)
 
+    async def sniper_task():
+        while True:
+            items = sniper.fetch_items()
+            for item in items:
+                price = item.get("price") or item.get("total_item_price", {}).get("amount", 0)
+                status = sniper.get_clean_status(item)
+                title = item.get("title")
+                url_item = item.get("url") or f"https://www.vinted.de/items/{item.get('id')}"
+
+                embed = discord.Embed(
+                    title=f"🔥 {title}",
+                    url=url_item,
+                    description=f"💶 Preis: {price} €\n✨ Zustand: {status}"
+                )
+                await channel.send(embed=embed)
+                await asyncio.sleep(0.5)  # Pause nach jeder Nachricht
+
+            await asyncio.sleep(1)  # kurze Pause zwischen API-Abfragen
+
+    task = asyncio.create_task(sniper_task())
+    active_snipers[channel.id] = task
+
+@bot.tree.command(name="stop", description="Stoppe den Sniper in diesem Channel")
+async def stop(interaction: discord.Interaction):
+    channel = interaction.channel
+    task = active_snipers.get(channel.id)
+    if task:
+        task.cancel()
+        del active_snipers[channel.id]
+        await channel.send("🛑 Sniper gestoppt!")
+    else:
+        await channel.send("❌ Kein aktiver Sniper in diesem Channel.")
 
 bot.run(TOKEN)
