@@ -1,22 +1,16 @@
 import os
 import discord
 from discord.ext import commands
-from discord import app_commands
 
-# =========================
-# ENV VARIABLEN
-# =========================
-TOKEN = os.getenv("DISCORD_TOKEN")          # Bot Token (GEHEIM)
-GUILD_ID = int(os.getenv("1459838801391259900"))  # Server ID (Zahl)
+TOKEN = os.getenv("DISCORD_TOKEN")
+GUILD_ID = int(os.getenv("DISCORD_GUILD_ID"))  # <- hier der Name der ENV
 
 if not TOKEN or not GUILD_ID:
     raise RuntimeError("DISCORD_TOKEN oder DISCORD_GUILD_ID fehlt")
 
-# =========================
-# BOT SETUP
-# =========================
 intents = discord.Intents.default()
 bot = commands.Bot(command_prefix="!", intents=intents)
+
 
 # =========================
 # EVENTS
@@ -48,3 +42,4 @@ async def start(interaction: discord.Interaction):
 # BOT START
 # =========================
 bot.run(TOKEN)
+
