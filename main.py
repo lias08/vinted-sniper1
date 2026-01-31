@@ -122,10 +122,11 @@ class VintedSniper:
                 time.sleep(10)
             except Exception as e:
                 print(f"❌ Fehler: {e}")
-                time.sleep(10)
+                time.sleep(1)
 
 if __name__ == "__main__":
     bot = VintedSniper(BROWSER_URL)
 
     bot.run()
+
 
