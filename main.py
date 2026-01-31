@@ -1,75 +1,85 @@
 import discord
-from discord import app_commands
-from discord.ext import commands, tasks
-import asyncio
+from discord.ext import commands
 from sniper import VintedSniper
-
+import asyncio
 import os
 
-TOKEN = os.getenv("DISCORD_TOKEN")  # Discord Bot Token
+TOKEN = os.getenv("DISCORD_TOKEN")
 
 intents = discord.Intents.default()
-intents.message_content = True  # nötig für Slash Commands
-
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-active_snipers = {}  # Channel-ID -> Task
+tasks = {}
 
 @bot.event
 async def on_ready():
+    await bot.tree.sync()
     print(f"✅ Bot online als {bot.user}")
-    try:
-        synced = await bot.tree.sync()
-        print(f"✅ Slash Commands synchronisiert: {len(synced)}")
-    except Exception as e:
-        print(f"Fehler beim Sync: {e}")
 
-@bot.tree.command(name="start", description="Starte Vinted Sniper in diesem Channel")
-@app_commands.describe(url="URL zum Vinted Katalog")
+@bot.tree.command(name="start", description="Starte Vinted Suche in diesem Channel")
 async def start(interaction: discord.Interaction, url: str):
-    await interaction.response.send_message(
-        "✅ Suche gestartet, Ergebnisse erscheinen hier.", ephemeral=True
-    )
-
     channel = interaction.channel
 
-    if channel.id in active_snipers:
-        await channel.send("⚠️ Sniper läuft bereits in diesem Channel!")
+    if channel.id in tasks:
+        await interaction.response.send_message(
+            "⚠️ In diesem Channel läuft bereits ein Sniper", ephemeral=True
+        )
         return
+
+    await interaction.response.send_message(
+        "🔍 Suche gestartet in diesem Channel", ephemeral=True
+    )
 
     sniper = VintedSniper(url)
 
-    async def sniper_task():
+    async def runner():
         while True:
             items = sniper.fetch_items()
+
             for item in items:
-                price = item.get("price") or item.get("total_item_price", {}).get("amount", 0)
-                status = sniper.get_clean_status(item)
-                title = item.get("title")
-                url_item = item.get("url") or f"https://www.vinted.de/items/{item.get('id')}"
+                base_price = sniper.format_price(item)
+                total_price = sniper.calc_total_price(base_price)
+                image = sniper.get_image(item)
 
                 embed = discord.Embed(
-                    title=f"🔥 {title}",
-                    url=url_item,
-                    description=f"💶 Preis: {price} €\n✨ Zustand: {status}"
+                    title=f"🔥 {item.get('title')}",
+                    url=item.get("url") or f"https://www.vinted.de/items/{item['id']}",
+                    color=0x09b1ba
                 )
+
+                embed.add_field(name="🏷️ Marke", value=item.get("brand_title", "—"), inline=True)
+                embed.add_field(name="💶 Preis", value=f"{base_price:.2f} €", inline=True)
+                embed.add_field(name="🚚 Gesamt ca.", value=f"{total_price:.2f} €", inline=True)
+
+                embed.add_field(name="✨ Zustand", value=item.get("status", "—"), inline=True)
+                embed.add_field(name="📏 Größe", value=item.get("size_title", "—"), inline=True)
+                embed.add_field(
+                    name="⏰ Hochgeladen",
+                    value=sniper.get_uploaded_time(item),
+                    inline=True
+                )
+
+                if image:
+                    embed.set_image(url=image)
+
                 await channel.send(embed=embed)
-                await asyncio.sleep(0.5)  # Pause nach jeder Nachricht
+                await asyncio.sleep(0.5)
 
-            await asyncio.sleep(1)  # kurze Pause zwischen API-Abfragen
+            await asyncio.sleep(1)
 
-    task = asyncio.create_task(sniper_task())
-    active_snipers[channel.id] = task
+    task = asyncio.create_task(runner())
+    tasks[channel.id] = task
 
-@bot.tree.command(name="stop", description="Stoppe den Sniper in diesem Channel")
+@bot.tree.command(name="stop", description="Stoppt die Suche in diesem Channel")
 async def stop(interaction: discord.Interaction):
     channel = interaction.channel
-    task = active_snipers.get(channel.id)
+    task = tasks.get(channel.id)
+
     if task:
         task.cancel()
-        del active_snipers[channel.id]
-        await channel.send("🛑 Sniper gestoppt!")
+        del tasks[channel.id]
+        await interaction.response.send_message("🛑 Sniper gestoppt", ephemeral=True)
     else:
-        await channel.send("❌ Kein aktiver Sniper in diesem Channel.")
+        await interaction.response.send_message("❌ Kein aktiver Sniper", ephemeral=True)
 
 bot.run(TOKEN)
